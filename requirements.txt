@@ -9,3 +9,6 @@ tqdm
 gdown
 soundfile
 py7zr
+syllables
+pyworld
+pyloudnorm
