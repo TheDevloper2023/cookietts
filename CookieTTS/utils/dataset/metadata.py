@@ -18,6 +18,18 @@ def identify_transcript_storage(directory, audio_files, audio_ext, audio_basenam
         return ["clipper",]
     del files_with_txts, set_txt_files
     
+    # look for txt or csv with name "*_master_dataset.txt"
+    # this comes up for Persona Nerd datasets. I don't know which ones specifically.
+    n_valid_txts = 0
+    valid_txts = list()
+    for txt_file in txt_files:
+        if os.stat(txt_file).st_size > 4 and txt_file.endswith("_master_dataset.txt"):
+            valid_txts.append(txt_file)
+            n_valid_txts += 1
+    if n_valid_txts == 1:
+        return "tacotron", valid_txts
+    del n_valid_txts, valid_txts
+    
     # 2.1.2 test if txts use Tacotron (or LJSpeech) Style Format
     #look for txt or csv file with more than 3 lines and containing '|' chars.
     n_valid_txts = 0
@@ -75,7 +87,7 @@ def filelist_get_transcript(audio_file, filelist, filelist_paths, filelist_names
                 print(f'"{audio_file}" not found in filelists')
                 raise FileNotFoundError(ex)
     transcript = filelist[path_index][1]
-    return transcript
+    return transcript.strip()
 
 
 def clipper_get_transcript(audio_file):
@@ -278,6 +290,9 @@ def get_dataset_meta(directory, meta=None, default_speaker=None, default_emotion
             files_skipped+=1; continue
         except KeyError as ex:
             print(ex, f'Skipping file: "{audio_file}"', sep='\n')
+            files_skipped+=1; continue
+        if len(transcript) < 2:
+            print(f'Skipping file: "{audio_file}"', sep='\n')
             files_skipped+=1; continue
         
         # 2.2.2 - get speaker name, emotion(s), noise level, source, source_type

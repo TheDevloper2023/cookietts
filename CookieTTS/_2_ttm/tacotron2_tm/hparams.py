@@ -46,10 +46,12 @@ def create_hparams(hparams_string=None, verbose=False):
         use_TBPTT=False,  # continue processing longer files into the next training iteration
         max_segment_length=800,# max mel length till a segment is sliced.
         
+        num_workers=4,# number of threads for dataloading per GPU
         ###################################
         ## Dataset / Filelist Parameters ##
         ###################################
         data_source=0,# 0 to use nvidia/tacotron2 filelists, 1 to use automatic dataset processor
+        force_load=True,# if a file fails to load, replace it with a random other file.
         
         # if data_source is 0:
         speakerlist='/media/cookie/Samsung 860 QVO/ClipperDatasetV2/filelists/speaker_ids.txt',
