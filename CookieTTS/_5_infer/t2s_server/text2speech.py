@@ -155,7 +155,7 @@ def get_first_over_thresh(x, threshold):
     x = x.clone().cpu().float() # using CPU because GPU implementation of argmax() splits tensor into 32 elem chunks, each chunk is parsed forward then the outputs are collected together... backwards
     x[:,-1] = threshold # set last to threshold just incase the output didn't finish generating.
     x[x>threshold] = threshold
-    if int(''.join(torch.__version__.split('.'))) < 170:
+    if int(''.join(torch.__version__.split('+')[0].split('.'))) < 170:
         return ( (x.size(1)-1)-(x.flip(dims=(1,)).argmax(dim=1)) ).to(device).int()
     else:
         return x.argmax(dim=1).to(device).int()
@@ -271,7 +271,7 @@ class T2S:
         for obj in gc.get_objects():
             try:
                 if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                    print(type(obj), obj.size())
+                    pass#print(type(obj), obj.size())
             except:
                 pass
         print('\n'*10)

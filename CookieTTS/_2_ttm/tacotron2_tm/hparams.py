@@ -57,7 +57,7 @@ def create_hparams(hparams_string=None, verbose=False):
                                      # Should allow more flexibility with TBPTT and remove quite a few problems when disabled.
         
         min_avg_max_att       = 0.50 ,# files under this alignment strength are filtered out of the dataset during training.
-        max_diagonality       = 1.16 ,# files under this alignment strength are filtered out of the dataset during training.
+        max_diagonality       = 1.16 ,# files  over this     diagonality    are filtered out of the dataset during training.
         max_spec_mse          = 1.00 ,# files  over this mean squared error are filtered out of the dataset during training.
         min_avg_max_att_start = 30000,# when to start filtering out weak alignments.
                                       # (normally mis-labelled files or files that are too challenging to learn)
@@ -83,6 +83,8 @@ def create_hparams(hparams_string=None, verbose=False):
         dataset_p_val = 0.03,# portion of dataset for Validation
         dataset_min_duration = 1.4,# minimum duration of audio files to be added
         
+        inference_equally_sample_speakers=True,# Will change the 'inference' results to use the same number of files from each speaker.
+                                               # This makes sense if the speakers you want to clone aren't the same as the speakers with the most audio data.
         force_load  = True,# if a file fails to load, replace it with a random other file.
         
         speaker_mse_sampling_start = 65000,# when True, instead of loading each audio file in order, load audio files
@@ -231,7 +233,7 @@ def create_hparams(hparams_string=None, verbose=False):
         # (Decoder) DecoderRNN
         decoder_rnn_dim            = 768,  # 1024 baseline
         DecRNN_hidden_dropout_type = 'dropout',# options ('dropout','zoneout')
-        p_DecRNN_hidden_dropout    = 0.10,  # 0.1 baseline
+        p_DecRNN_hidden_dropout    = 0.25,  # 0.1 baseline
         decoder_residual_connection= False,# residual connections with the AttentionRNN hidden state and Attention/Memory Context
         # Optional Second Decoder
         second_decoder_rnn_dim=768,# 0 baseline # Extra DecoderRNN to learn more complex patterns # set to 0 to disable layer.

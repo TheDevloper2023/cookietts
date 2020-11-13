@@ -245,7 +245,6 @@ def load_checkpoint(checkpoint_path, model, optimizer, best_val_loss_dict, best_
     if 'average_loss' in checkpoint_dict.keys():
         average_loss = checkpoint_dict['average_loss']
 	
-	
     iteration = 0 if start_from_checkpoints_from_zero else checkpoint_dict['iteration']
     saved_lookup = checkpoint_dict['speaker_id_lookup'] if 'speaker_id_lookup' in checkpoint_dict.keys() else None
     
@@ -259,8 +258,12 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, hparams, best_va
         iteration, filepath))
 
     # get speaker names to ID
-    speakerlist = load_filepaths_and_text(hparams.speakerlist)
-    speaker_name_lookup = {x[1]: speaker_id_lookup[x[2]] for x in speakerlist if x[2] in speaker_id_lookup.keys()}
+    if os.path.exists(hparams.speakerlist):
+        speakerlist = load_filepaths_and_text(hparams.speakerlist)
+        speaker_name_lookup = {x[1]: speaker_id_lookup[x[2]] for x in speakerlist if x[2] in speaker_id_lookup.keys()}
+    else:
+        print("'speakerlist' in hparams.py not found! Speaker names will be IDs instead.")
+        speaker_name_lookup = speaker_id_lookup# if there is no speaker
     
     save_dict = {'iteration'           : iteration,
                  'state_dict'          : model.state_dict(),
@@ -322,6 +325,7 @@ def write_dict_to_file(file_losses, fpath, n_gpus, rank, deliminator='","', ends
     return file_losses
 
 def get_mse_sampled_filelist(original_filelist, file_losses, exp_factor, seed=None):
+    # collect losses of each file for each speaker into lists
     speaker_losses = {}
     for loss_dict in file_losses.values():
         speaker_id = str(loss_dict['speaker_id_ext'])
@@ -334,6 +338,7 @@ def get_mse_sampled_filelist(original_filelist, file_losses, exp_factor, seed=No
                 elif loss_value is not None:
                     speaker_losses[speaker_id][loss_name].append(loss_value)
     
+    # then average the loss list for each speaker
     speaker_avg_losses = speaker_losses
     for speaker in speaker_avg_losses.keys():
         for loss_name in speaker_avg_losses[speaker].keys():
@@ -390,9 +395,10 @@ def validate(hparams, args, file_losses, model, criterion, valset, best_val_loss
     assert teacher_force >= 0, 'teacher_force not specified.'
     model.eval()
     with torch.no_grad():
-        if teacher_force == 2:# if inference, sample from each speaker equally. So speakers with smaller datasets get the same weighting onto the val loss.
+        if hparams.inference_equally_sample_speakers and teacher_force == 2:# if inference, sample from each speaker equally. So speakers with smaller datasets get the same weighting onto the val loss.
             orig_filelist = valset.filelist
             valset.update_filelist(get_mse_sampled_filelist(orig_filelist, file_losses, 0.0, seed=1234))
+            assert len(valset.filelist), '0 files in valset! If your dataset has single speaker, you can change "inference_equally_sample_speakers" to False in hparams.py'
         val_sampler = DistributedSampler(valset) if hparams.distributed_run else None
         val_loader = DataLoader(valset, sampler=val_sampler, num_workers=hparams.num_workers,
                                 shuffle=False, batch_size=hparams.batch_size,
@@ -432,10 +438,10 @@ def validate(hparams, args, file_losses, model, criterion, valset, best_val_loss
             # end forloop
         loss_dict_total = {k: v/(i+1) for k, v in loss_dict_total.items()}
         # end torch.no_grad()
-        
+    
     # reverse changes to valset and model
-    if teacher_force == 2:# if inference, sample from each speaker equally. So speakers with smaller datasets get the same weighting onto the val loss.
-        valset.filelist = orig_filelist
+    if hparams.inference_equally_sample_speakers and teacher_force == 2:# if inference, sample from each speaker equally. So speakers with smaller datasets get the same weighting onto the val loss.
+        valset.update_filelist(orig_filelist)
     model.train()
     
     # update best losses
@@ -557,6 +563,7 @@ def train(args, rank, group_name, hparams):
     best_validation_loss = 1e3# used to see when "best_val_model" should be saved
     best_inf_attsc       = -99# used to see when "best_inf_attsc" should be saved
     
+    average_loss = 9e9
     n_restarts = 0
     checkpoint_iter = 0
     iteration = 0
