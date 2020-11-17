@@ -181,7 +181,7 @@ class T2S:
         # override since my checkpoints are still missing speaker names
         if self.conf['TTM']["models"][self.ttm_current]['use_speaker_ids_file_override']:
             speaker_ids_fpath = self.conf['TTM']["models"][self.ttm_current]['speaker_ids_file']
-            self.ttm_sp_name_lookup = {name: self.ttm_sp_id_lookup[int(ext_id)] for _, name, ext_id, *_ in load_filepaths_and_text(speaker_ids_fpath)}
+            self.ttm_sp_name_lookup = {name.strip(): self.ttm_sp_id_lookup[int(ext_id.strip())] for _, name, ext_id, *_ in load_filepaths_and_text(speaker_ids_fpath)}
         
         # load HiFi-GAN
         self.MTW_current = self.conf['MTW']['default_model']
@@ -327,8 +327,8 @@ class T2S:
         self.tacotron, self.ttm_hparams, self.ttm_sp_name_lookup, self.ttm_sp_id_lookup = self.load_tacotron2(self.conf['TTM']['models'][tacotron_name]['modelpath'])
         self.ttm_current = tacotron_name
         
-        if self.conf['TTM']['use_speaker_ids_file_override']:# (optional) override
-            self.ttm_sp_name_lookup = {name: self.ttm_sp_id_lookup[int(ext_id)] for _, name, ext_id in load_filepaths_and_text(self.conf['TTM']['speaker_ids_file'])}
+        if self.conf['TTM']['models'][tacotron_name]['use_speaker_ids_file_override']:# (optional) override
+            self.ttm_sp_name_lookup = {name: self.ttm_sp_id_lookup[int(ext_id)] for _, name, ext_id in load_filepaths_and_text(self.conf['TTM']['models'][tacotron_name]['speaker_ids_file'])}
     
     
     def get_closest_names(self, names):
@@ -646,7 +646,7 @@ class T2S:
             audio_bs = len(audio_batch)
             for j, audio in enumerate(audio_batch):
                 # remove Vocoder padding
-                audio_end = output_lengths[j] * self.ttm_hparams.hop_length
+                audio_end = output_lengths[j] * self.MTW_conf['hop_size']
                 audio = audio[:,:audio_end]
                 
                 # remove Tacotron2 padding
@@ -660,7 +660,7 @@ class T2S:
                 
                 # add silence to clips (ignore last clip)
                 if cat_silence_s:
-                    cat_silence_samples = int(cat_silence_s*self.ttm_hparams.sampling_rate)
+                    cat_silence_samples = int(cat_silence_s*self.MTW_conf['sampling_rate'])
                     audio = torch.nn.functional.pad(audio, (0, cat_silence_samples))
                 
                 # scale audio for int16 output
@@ -671,7 +671,7 @@ class T2S:
                     print(f"File already found at [{save_path}], overwriting.")
                     os.remove(save_path)
                 
-                write(save_path, self.ttm_hparams.sampling_rate, audio)
+                write(save_path, self.MTW_conf['sampling_rate'], audio)
                 
                 counter+=1
                 audio_len+=audio_end.item()
@@ -735,7 +735,7 @@ class T2S:
                 print(f"{text_index}/{total_len}, {eta_finish:.2f}mins remaining.")
                 del time_per_clip, eta_finish, remaining_files, time_elapsed
             
-            audio_seconds_generated = round(audio_len/self.ttm_hparams.sampling_rate,3)
+            audio_seconds_generated = round(audio_len/self.MTW_conf['sampling_rate'],3)
             time_to_gen = round(time.time()-start_time,3)
             if show_time_to_gen:
                 print(f"Generated {audio_seconds_generated}s of audio in {time_to_gen}s wall time - so far. (best of {tries.sum().astype('int')} tries this pass) ({audio_seconds_generated/time_to_gen:.2f}xRT) ({sum([x<0.6 for x in all_best_scores])/len(all_best_scores):.1%}Failure Rate)")

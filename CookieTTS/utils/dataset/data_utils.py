@@ -299,8 +299,9 @@ def generate_filelist_from_datasets(DATASET_FOLDER,
     fpath = os.path.join(DATASET_CONF_FOLDER, 'speaker_info.txt')
     with open(fpath, "w") as f:
         lines = []
-        lines.append(f';{"speaker_id":<9}|{"speaker_name":<32}|{"dataset":<24}|{"source":<24}|{"source_type":<20}|duration_hrs\n;')
-        for speaker_id, (speaker_name, duration) in enumerate(speaker_durations.items()):
+        lines.append(f';{"dataset":<23}|{"speaker_name":<32}|{"speaker_id":<10}|{"source":<24}|{"source_type":<20}|duration_hrs\n;')
+        for speaker_id, speaker_name in enumerate(sorted(speaker_durations.keys())):
+            duration = speaker_durations[speaker_name]
             dataset = dataset_lookup[speaker_name]
             if duration < MIN_SPEAKER_DURATION_SECONDS:
                 continue
@@ -315,15 +316,15 @@ def generate_filelist_from_datasets(DATASET_FOLDER,
             assert source_type, 'Recieved no dataset source type'
             assert speaker_name, 'Recieved no speaker name.'
             assert duration, f'Recieved speaker "{speaker_name}" with 0 duration.'
-            lines.append(f'{speaker_id:<10}|{speaker_name:<32}|{dataset:<24}|{source:<24}|{source_type:<20}|{duration/3600:>8.4f}')
+            lines.append(f'{dataset:<24}|{speaker_name:<32}|{speaker_id:<10}|{source:<24}|{source_type:<20}|{duration/3600:>8.4f}')
         f.write('\n'.join(lines))
     print('Done!\n')
     
     # Unpack meta into filelist
     # filelist = [["path","quote","speaker_id"], ["path","quote","speaker_id"], ...]
+    speaker_lookup = {speaker: index for index, speaker in enumerate(sorted(speaker_durations.keys()))}
     filelist = []
     for dataset, clips in meta.items():
-        speaker_lookup = {speaker: index for index, speaker in enumerate(list(speaker_durations.keys()))}
         for i, clip in enumerate(clips):
             audiopath  = clip["path"]
             quote      = clip["quote"]
@@ -337,7 +338,8 @@ def generate_filelist_from_datasets(DATASET_FOLDER,
     
     # speakerlist = [["name","id","dataset","source","source_type","duration"], ...]
     speakerlist = []
-    for speaker_id, (speaker_name, duration) in enumerate(speaker_durations.items()):
+    for speaker_id, speaker_name in enumerate(sorted(speaker_durations.keys())):
+        duration = speaker_durations[speaker_name]
         dataset = dataset_lookup[speaker_name]
         if duration < MIN_SPEAKER_DURATION_SECONDS:
             continue
@@ -467,13 +469,14 @@ class TTSDataset(torch.utils.data.Dataset):
         #################
         ## Speaker IDs ##
         #################
+        self.n_speakers = hparams.n_speakers
         self.speaker_ids = speaker_ids
         if speaker_ids is None:
             if hasattr(hparams, 'raw_speaker_ids') and hparams.raw_speaker_ids:
-                self.speaker_ids = {k:k for k in range(hparams.n_speakers)} # map IDs in files directly to internal IDs
+                self.speaker_ids = {k:k for k in range(self.n_speakers)} # map IDs in files directly to internal IDs
             else:
                 self.speaker_ids = self.create_speaker_lookup_table(self.filelist, numeric_sort=hparams.numeric_speaker_ids)
-        assert len(self.speaker_ids.values()) <= hparams.n_speakers, f'More speakers found in dataset(s) than set in hparams.py n_speakers\nFound {len(self.speaker_ids.values())} Speakers, Expected {hparams.n_speakers} or Less.'
+        assert len(self.speaker_ids.values()) <= self.n_speakers, f'More speakers found in dataset(s) than set in hparams.py n_speakers\nFound {len(self.speaker_ids.values())} Speakers, Expected {hparams.n_speakers} or Less.'
         
         ###################
         ## File Checking ##
@@ -718,6 +721,14 @@ class TTSDataset(torch.utils.data.Dataset):
         assert melspec.shape[1] == text_length, "Saved Alignment has wrong encoder length"
         return melspec
     
+    def indexes_to_one_hot(self, indexes, num_classes=None):
+        """Converts a vector of indexes to a batch of one-hot vectors. """
+        indexes = indexes.type(torch.int64).view(-1, 1)
+        num_classes = num_classes if num_classes is not None else int(torch.max(indexes)) + 1
+        one_hots = torch.zeros(indexes.size()[0], num_classes).scatter_(1, indexes, 1)
+        one_hots = one_hots.view(*indexes.shape, -1)
+        return one_hots
+    
     def one_hot_embedding(self, labels, num_classes=None):
         """Embedding labels to one-hot form.
         
@@ -839,10 +850,11 @@ class TTSDataset(torch.utils.data.Dataset):
         if any(arg in ('speaker_id','speaker_id_ext') for arg in args):
             output['speaker_id_ext'] = speaker_id_ext
             output['speaker_id'] = self.get_speaker_id(speaker_id_ext)# get speaker_id as tensor normalized [ 0 -> len(speaker_ids) ]
+            output['speaker_id_onehot'] = self.indexes_to_one_hot(output['speaker_id'], num_classes=self.n_speakers).squeeze()# [n_speakers]
         
         if any([arg in ['gt_emotion_id','gt_emotion_onehot'] for arg in args]):
             output['gt_emotion_id'] = self.get_emotion_id(audiopath)# [1] IntTensor
-            gt_emotion_onehot = self.one_hot_embedding(gt_emotion_id, num_classes=self.n_classes+1).squeeze(0)[:-1]# [n_classes]
+            gt_emotion_onehot = self.indexes_to_one_hot(gt_emotion_id, num_classes=self.n_classes+1).squeeze(0)[:-1]# [n_classes]
             output['gt_emotion_onehot'] = gt_emotion_onehot
         
         if 'torchmoji_hdn' in args:
@@ -1191,8 +1203,9 @@ class Collate():
         
         out['torchmoji_hdn']     = self.collatek(batch, 'torchmoji_hdn',     ids_sorted, dtype=torch.float)# [B, C]
         
-        out['speaker_id']        = self.collatek(batch, 'speaker_id',        ids_sorted, dtype=torch.long )# [B]
         out['speaker_id_ext']    = self.collatek(batch, 'speaker_id_ext',    ids_sorted, dtype=None       )# [int, ...]
+        out['speaker_id']        = self.collatek(batch, 'speaker_id',        ids_sorted, dtype=torch.long )# [B]
+        out['speaker_id_onehot'] = self.collatek(batch, 'speaker_id_onehot', ids_sorted, dtype=torch.long )# [B]
         
         out['gt_emotion_id']     = self.collatek(batch, 'gt_emotion_id',     ids_sorted, dtype=torch.long )# [B]
         out['gt_emotion_onehot'] = self.collatek(batch, 'gt_emotion_onehot', ids_sorted, dtype=torch.long )# [B, n_emotions]
