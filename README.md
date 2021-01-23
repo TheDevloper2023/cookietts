@@ -1,3 +1,10 @@
+# Check out the Google Colab notebooks I made for this repo!
+[Training](https://colab.research.google.com/drive/1uvP6cHtDYsgy_0mmlguY_CZrzy6T5e5r?usp=sharing)
+
+[Synthesis](https://colab.research.google.com/drive/1pArfzHa_m4RkkvwtbMYshbGxunhzqqh8?usp=sharing)
+
+---
+
 # This repo kinda works!
 
 Check back in a week. Thanks.
