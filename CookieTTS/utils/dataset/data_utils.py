@@ -1161,7 +1161,7 @@ class TTSDataset(torch.utils.data.Dataset):
             original_lufs = original_lufs.to(audio)
         ddb = target_lufs-original_lufs
         audio = audio*((10**(ddb*0.1))**0.5)
-        if audio.abs().max() > 1.0:
+        if audio.abs().max():
             audio /= audio.abs().max()
         return audio
     
