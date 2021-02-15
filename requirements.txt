@@ -12,9 +12,5 @@ soundfile
 py7zr
 syllables
 emoji
-webrtcvad
 pyloudnorm
-norbert
-webrtcvad
-ipywidgets
 pyworld
