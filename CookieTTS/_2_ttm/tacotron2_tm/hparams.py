@@ -10,7 +10,7 @@ def create_hparams(hparams_string=None, verbose=False):
         #################################
         ## Experiment Parameters       ##
         #################################
-        epochs = 5000,
+        epochs = 1000,
         
         n_models_to_keep=4,# NOT IMPLEMENTED # if over this number, will delete oldest checkpoint(s). Will never delete "best" checkpoints (as shown below).
         save_best_val_model = True,# save best teacher forced postnet MFSE as a seperate checkpoint.
@@ -142,7 +142,7 @@ def create_hparams(hparams_string=None, verbose=False):
         ## Audio Parameters             ##
         ##################################
         sampling_rate= 44100,
-        target_lufs  = -15.0,# Loudness each file is rescaled to, use None for original file loudness.
+        target_lufs  = -27.0,# Loudness each file is rescaled to, use None for original file loudness.
         
         trim_enable      = True,# set to False to disable trimming completely
         trim_cache_audio = True,# save trimmed audio to disk to load later. Saves CPU usage, uses more disk space.
