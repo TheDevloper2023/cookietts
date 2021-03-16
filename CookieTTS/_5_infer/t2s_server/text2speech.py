@@ -460,6 +460,8 @@ class T2S:
                     speaker_names.append(speaker_names.pop(0))
                     return first_speaker
                 batch_speaker_names = [shuffle_and_return() for i in range(simultaneous_texts)]
+            elif multispeaker_mode == "hybrid_voices":
+                batch_speaker_names = speaker_names * -(-simultaneous_texts)
             else:
                 raise NotImplementedError
             
@@ -476,10 +478,21 @@ class T2S:
             tacotron_speaker_ids = torch.LongTensor(tacotron_speaker_ids).cuda().repeat_interleave(batch_size_per_text)
             
             # get style input
-            try:
-                tokenized, _, _ = self.tm_sentence_tokenizer.tokenize_sentences(text_batch) # input array [B] e.g: ["Test?","2nd Sentence!"]
-            except:
-                raise Exception(f"TorchMoji failed to tokenize text:\n{text_batch}")
+            print(text_batch)
+            for t in text_batch:
+                if "|" in t:
+                    text_batch, style_text = t.split("|")
+                    text_batch = [text_batch]
+                    style_text = [style_text]
+                    try:
+                        tokenized, _, _ = self.tm_sentence_tokenizer.tokenize_sentences(style_text) # input array [B] e.g: ["Test?","2nd Sentence!"]
+                    except:
+                        raise Exception(f"TorchMoji failed to tokenize text:\n{text_batch}")
+                else:
+                    try:
+                        tokenized, _, _ = self.tm_sentence_tokenizer.tokenize_sentences(text_batch) # input array [B] e.g: ["Test?","2nd Sentence!"]
+                    except:
+                        raise Exception(f"TorchMoji failed to tokenize text:\n{text_batch}")
             try:
                 embedding = self.tm_torchmoji(tokenized) # returns np array [B, Embed]
             except Exception as ex:
@@ -523,7 +536,7 @@ class T2S:
                 best_score_str = ['']*simultaneous_texts
                 while np.amin(best_score) < target_score:
                     # run Tacotron
-                    outputs = self.tacotron.inference(sequence, text_lengths.repeat_interleave(batch_size_per_text, dim=0), tacotron_speaker_ids, style_input)
+                    outputs = self.tacotron.inference(sequence, text_lengths.repeat_interleave(batch_size_per_text, dim=0), tacotron_speaker_ids, multispeaker_mode, style_input)
                     mel_batch_outputs_postnet = outputs['pred_mel_postnet']
                     gate_batch_outputs        = outputs['pred_gate']
                     alignments_batch          = outputs['alignments']
