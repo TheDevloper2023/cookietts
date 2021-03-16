@@ -41,7 +41,8 @@ def process_rq_result(result):
     out['split_nl']            = True if result.get('input_split_nl'         ) == "on" else False
     out['split_quo']           = True if result.get('input_split_quo'        ) == "on" else False
     out['multispeaker_mode']   =       result.get(  'input_multispeaker_mode')
-    
+    out['growl'] = float(result.get('growl'))
+
     # (Text) CRLF to LF
     text = text.replace('\r\n','\n')
     
@@ -121,6 +122,7 @@ def texttospeech():
                                 split_nl            = tts_dict['split_nl'],
                                 split_quo           = tts_dict['split_quo'],
                                 multispeaker_mode   = tts_dict['multispeaker_mode'],
+                                growl               = tts_dict['growl'],
                                 
                                 gen_time    = f'{tts_outdict["time_to_gen"]:.1f}',
                                 gen_dur     = f'{tts_outdict["audio_seconds_generated"]:.1f}',
@@ -169,6 +171,7 @@ def show_entries():
         split_nl            = conf['webpage']['defaults']['split_nl'],
         split_quo           = conf['webpage']['defaults']['split_quo'],
         multispeaker_mode   = conf['webpage']['defaults']['multispeaker_mode'],
+        growl               = conf['webpage']['defaults']['growl'],
         gen_time   = "",
         gen_dur    = "",
         total_specs= "",

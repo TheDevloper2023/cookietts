@@ -340,7 +340,7 @@ class T2S:
     @torch.no_grad()
     def infer(self, text, speaker, use_arpabet, cat_silence_s,
               batch_size, max_attempts, max_duration_s, dyna_max_duration_s,
-              textseg_len_target, split_nl, split_quo, multispeaker_mode,
+              textseg_len_target, split_nl, split_quo, multispeaker_mode, growl,
               gate_delay=2, gate_threshold=0.7, filename_prefix=None,
               status_updates=True, show_time_to_gen=True, end_mode='thresh',
               target_score=0.75, absolute_maximum_tries=2048, absolutely_required_score=-1e3):
@@ -478,7 +478,7 @@ class T2S:
             tacotron_speaker_ids = torch.LongTensor(tacotron_speaker_ids).cuda().repeat_interleave(batch_size_per_text)
             
             # get style input
-            print(text_batch)
+            print(tacotron_speaker_ids)
             for t in text_batch:
                 if "|" in t:
                     text_batch, style_text = t.split("|")
@@ -536,7 +536,7 @@ class T2S:
                 best_score_str = ['']*simultaneous_texts
                 while np.amin(best_score) < target_score:
                     # run Tacotron
-                    outputs = self.tacotron.inference(sequence, text_lengths.repeat_interleave(batch_size_per_text, dim=0), tacotron_speaker_ids, multispeaker_mode, style_input)
+                    outputs = self.tacotron.inference(sequence, text_lengths.repeat_interleave(batch_size_per_text, dim=0), tacotron_speaker_ids, multispeaker_mode, growl, style_input)
                     mel_batch_outputs_postnet = outputs['pred_mel_postnet']
                     gate_batch_outputs        = outputs['pred_gate']
                     alignments_batch          = outputs['alignments']

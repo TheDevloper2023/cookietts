@@ -18,6 +18,7 @@ from CookieTTS.utils.model.utils import get_mask_from_lengths, dropout_frame, fr
 
 from CookieTTS._2_ttm.tacotron2_ssvae.nets.SylpsNet import SylpsNet
 from CookieTTS._2_ttm.tacotron2_tm.modules_vae import ReferenceEncoder
+from CookieTTS._2_ttm.tacotron2_tm.parameters import voicemeter
 from CookieTTS._2_ttm.untts.model import MaskedBatchNorm1d, LnBatchNorm1d
 
 drop_rate = 0.5
@@ -1292,18 +1293,29 @@ class Tacotron2(nn.Module):
                 outputs[key] = input
         return outputs
     
-    def inference(self, text_seq, text_lengths, speaker_id, multispeaker_mode, torchmoji_hdn, gt_sylps=None, gt_mel=None, return_hidden_state=False):# [B, enc_T], [B], [B], [B], [B, tm_dim]
+    def inference(self, text_seq, text_lengths, speaker_id, multispeaker_mode, growl, torchmoji_hdn, gt_sylps=None, gt_mel=None, return_hidden_state=False):# [B, enc_T], [B], [B], [B], [B, tm_dim]
         memory = []
         
         # (Encoder) Text -> Encoder Outputs, pred_sylps
         embedded_text = self.embedding(text_seq).transpose(1, 2) # [B, embed, txt_T]
         encoder_outputs, hidden_state, pred_sylps = self.encoder(embedded_text, text_lengths, speaker_ids=speaker_id) # [B, txt_T, enc_dim]
+        print(encoder_outputs.shape)
         memory.append(encoder_outputs)
         
         # (Speaker) speaker_id -> speaker_embed
         if hasattr(self, "speaker_embedding"):
             speaker_embed = self.speaker_embedding(speaker_id)
+            #speaker_id = torch.cuda.LongTensor([10, 12, 33, 36, 42, 45])
+            #speaker_embed = self.speaker_embedding(speaker_id)
             print(speaker_embed)
+            #mix_1, mix_2, mix_3, mix_4, mix_5, mix_6 = torch.split(speaker_embed, 1)
+            #speaker_embed = torch.add(speaker_embed, mix_2)
+            #speaker_embed = torch.add(speaker_embed, mix_3)
+            #speaker_embed = torch.add(speaker_embed, mix_4)
+            #speaker_embed = torch.add(speaker_embed, mix_5)
+            #speaker_embed = torch.add(speaker_embed, mix_6)
+            #speaker_embed = torch.div(speaker_embed, 2)
+            print(speaker_embed.shape)
             if multispeaker_mode == "hybrid_voices" and speaker_embed.shape[0] > 1:
               splits = int(speaker_embed.shape[0] / 2)
               mix_1, mix_2 = torch.split(speaker_embed, splits)
@@ -1311,6 +1323,8 @@ class Tacotron2(nn.Module):
               speaker_embed = torch.div(speaker_embed, 2)
               speaker_embed = speaker_embed.repeat(2, 1)
               print(speaker_embed)
+            speaker_embed = voicemeter(speaker_embed, growl)
+            print(speaker_embed[1])
             memory.append( speaker_embed[:, None].expand(-1, encoder_outputs.size(1), -1) )
         
         # (SylpsNet) Sylps -> sylzu, mu, logvar
