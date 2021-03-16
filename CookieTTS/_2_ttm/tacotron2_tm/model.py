@@ -1292,7 +1292,7 @@ class Tacotron2(nn.Module):
                 outputs[key] = input
         return outputs
     
-    def inference(self, text_seq, text_lengths, speaker_id, torchmoji_hdn, gt_sylps=None, gt_mel=None, return_hidden_state=False):# [B, enc_T], [B], [B], [B], [B, tm_dim]
+    def inference(self, text_seq, text_lengths, speaker_id, multispeaker_mode, torchmoji_hdn, gt_sylps=None, gt_mel=None, return_hidden_state=False):# [B, enc_T], [B], [B], [B], [B, tm_dim]
         memory = []
         
         # (Encoder) Text -> Encoder Outputs, pred_sylps
@@ -1303,6 +1303,14 @@ class Tacotron2(nn.Module):
         # (Speaker) speaker_id -> speaker_embed
         if hasattr(self, "speaker_embedding"):
             speaker_embed = self.speaker_embedding(speaker_id)
+            print(speaker_embed)
+            if multispeaker_mode == "hybrid_voices" and speaker_embed.shape[0] > 1:
+              splits = int(speaker_embed.shape[0] / 2)
+              mix_1, mix_2 = torch.split(speaker_embed, splits)
+              speaker_embed = torch.add(mix_1, mix_2)
+              speaker_embed = torch.div(speaker_embed, 2)
+              speaker_embed = speaker_embed.repeat(2, 1)
+              print(speaker_embed)
             memory.append( speaker_embed[:, None].expand(-1, encoder_outputs.size(1), -1) )
         
         # (SylpsNet) Sylps -> sylzu, mu, logvar
