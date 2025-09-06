@@ -14,4 +14,3 @@ syllables
 emoji==2.11.1
 pyloudnorm
 pyworld
-matplotlib==1.2.0
