@@ -136,13 +136,7 @@ IGNORED = [
     ]
 
 # Final pattern
-RE_PATTERN = re.compile(
-    "(?:"
-    + "|".join(IGNORED)
-    + "|("
-    + "|".join(TOKENS)
-    + "))"
-)
+RE_PATTERN = re.compile(r'|'.join(IGNORED) + r'|(' + r'|'.join(TOKENS) + r')', re.UNICODE | re.IGNORECASE)
 
 def tokenize(text):
     '''Splits given input string into a list of tokens.
