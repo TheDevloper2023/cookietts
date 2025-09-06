@@ -36,7 +36,7 @@ TITLES = [
     r'Prof\.',
     ]
 # Ensure case insensitivity
-RE_TITLES = r'|'.join([r'(?i)' + t for t in TITLES])
+RE_TITLES = r'|'.join(TITLES)
 
 # Symbols have to be created as separate patterns in order to match consecutive
 # identical symbols.
