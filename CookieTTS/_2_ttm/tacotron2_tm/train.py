@@ -1,3 +1,5 @@
+# %%writefile /content/cookietts/CookieTTS/_2_ttm/tacotron2_tm/train.py
+
 import os
 os.environ["LRU_CACHE_CAPACITY"] = "3"# reduces RAM usage massively with pytorch 1.4 or older
 import time
@@ -16,7 +18,6 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from model import Tacotron2, ResGAN, DebluraGAN, load_model
-from InfGAN import LSTMInferenceGAN, TemporalInferenceGAN
 from CookieTTS.utils.dataset.data_utils import TTSDataset, Collate, generate_filelist_from_datasets
 from CookieTTS.utils import get_args, force
 
@@ -95,7 +96,7 @@ def init_distributed(hparams, n_gpus, rank, group_name):
 
     # Set cuda device so everything is done on the right GPU.
     torch.cuda.set_device(rank % torch.cuda.device_count())
-    
+
     # Initialize distributed communication
     dist.init_process_group(
         backend=hparams.dist_backend, init_method=hparams.dist_url,
@@ -126,7 +127,7 @@ def prepare_dataloaders(hparams, dataloader_args, args, speaker_ids, audio_offse
     if hparams.data_source == 1:
         if args.rank == 0:
             fl_dict = get_filelist(hparams)
-        
+
         if args.n_gpus > 1:
             if args.rank == 0:
                 with open('fl_dict.pkl', 'wb') as pickle_file:
@@ -134,16 +135,16 @@ def prepare_dataloaders(hparams, dataloader_args, args, speaker_ids, audio_offse
             torch.distributed.barrier()# wait till all graphics cards reach this point.
             if args.rank > 0:
                 fl_dict = pickle.load(open('fl_dict.pkl', "rb"))
-        
+
         speakerlist = fl_dict['speakerlist']
-        
+
         filelist    = fl_dict['filelist']
         speaker_ids = fl_dict['speaker_ids']
         random.Random(0).shuffle(filelist)
         training_filelist   = filelist[ int(len(filelist)*hparams.dataset_p_val):]
         validation_filelist = filelist[:int(len(filelist)*hparams.dataset_p_val) ]
 
-        
+
         if args.n_gpus > 1:
             torch.distributed.barrier()# wait till all graphics cards reach this point.
             if args.rank == 0 and os.path.exists('fl_dict.pkl'):
@@ -163,17 +164,17 @@ def prepare_dataloaders(hparams, dataloader_args, args, speaker_ids, audio_offse
             print("'speakerlist' in hparams.py not found! Speaker names will be IDs instead.")
             speakerlist = [['Dataset',i,i,'Source','Source Type'] for i in range(speaker_id_lookup.keys())]
             speaker_name_lookup = speaker_id_lookup# if there is no speaker
-        
+
         training_filelist   = get_filelist(hparams, val=False)
         validation_filelist = get_filelist(hparams, val=True)
         speaker_ids = speaker_ids if hparams.use_saved_speakers else None
-    
+
     trainset = TTSDataset(training_filelist, hparams, dataloader_args, check_files=hparams.check_files, shuffle=False,
                            deterministic_arpabet=False, speaker_ids=speaker_ids,          audio_offset=audio_offset)
     valset = TTSDataset(validation_filelist, hparams, dataloader_args, check_files=hparams.check_files, shuffle=False,
                            deterministic_arpabet=True,  speaker_ids=trainset.speaker_ids, audio_offset=audio_offset)
     collate_fn = Collate(hparams)
-    
+
     #use_shuffle = False if hparams.use_TBPTT else True# can't shuffle with TBPTT
     use_shuffle = False# using custom Shuffle function inside dataloader.dataset which works with TBPTT
     if hparams.distributed_run:
@@ -182,7 +183,7 @@ def prepare_dataloaders(hparams, dataloader_args, args, speaker_ids, audio_offse
     else:
         train_sampler = None
         shuffle = use_shuffle
-    
+
     train_loader = DataLoader(trainset, shuffle=shuffle, sampler=train_sampler,
                               num_workers=hparams.num_workers,# prefetch_factor=hparams.prefetch_factor,
                               batch_size=hparams.batch_size, pin_memory=False,
@@ -204,16 +205,16 @@ def prepare_directories_and_logger(hparams, args):
 def warm_start_force_model(checkpoint_path, model, resGAN, dbGAN, infGAN):
     assert os.path.isfile(checkpoint_path)
     print(f"Warm starting model from checkpoint '{checkpoint_path}'")
-    
+
     if resGAN is not None and os.path.exists(checkpoint_path+'_resdis'):
         resGAN.load_state_dict_from_file(checkpoint_path+'_resdis')
-    
+
     if dbGAN is not None and os.path.exists(checkpoint_path+'_dbDis'):
         dbGAN.load_state_dict_from_file(checkpoint_path+'_dbDis')
-    
+
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
-    
+
     checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
     pretrained_dict = checkpoint_dict['state_dict']
     model_dict = model.state_dict()
@@ -227,7 +228,7 @@ def warm_start_force_model(checkpoint_path, model, resGAN, dbGAN, infGAN):
     if pretrained_missing: print(list(pretrained_missing.keys()),"doesn't have pretrained weights and has been reset")
     model_dict.update(filtered_dict)
     model.load_state_dict(model_dict)
-    
+
     iteration = 0
     if True:
         iteration = checkpoint_dict.get('iteration', 0)
@@ -238,16 +239,16 @@ def warm_start_force_model(checkpoint_path, model, resGAN, dbGAN, infGAN):
 def warm_start_model(checkpoint_path, model, resGAN, dbGAN, infGAN, ignore_layers):
     assert os.path.isfile(checkpoint_path)
     print("Warm starting model from checkpoint '{}'".format(checkpoint_path))
-    
+
     if resGAN is not None and os.path.exists(checkpoint_path+'_resdis'):
         resGAN.load_state_dict_from_file(checkpoint_path+'_resdis')
-    
+
     if dbGAN is not None and os.path.exists(checkpoint_path+'_dbDis'):
         dbGAN.load_state_dict_from_file(checkpoint_path+'_dbDis')
-    
+
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
-    
+
     checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
     model_dict = checkpoint_dict['state_dict']
     if len(ignore_layers) > 0:
@@ -266,20 +267,20 @@ def warm_start_model(checkpoint_path, model, resGAN, dbGAN, infGAN, ignore_layer
 def load_checkpoint(checkpoint_path, model, optimizer, resGAN, dbGAN, infGAN, best_val_loss_dict, best_loss_dict, best_validation_loss=1e3, best_inf_attsc=-99.):
     assert os.path.isfile(args.checkpoint_path)
     print("Loading checkpoint '{}'".format(args.checkpoint_path))
-    
+
     if resGAN is not None and os.path.exists(checkpoint_path+'_resdis'):
         resGAN.load_state_dict_from_file(checkpoint_path+'_resdis')
-    
+
     if dbGAN is not None and os.path.exists(checkpoint_path+'_dbDis'):
         dbGAN.load_state_dict_from_file(checkpoint_path+'_dbDis')
-    
+
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
-    
+
     checkpoint_dict = torch.load(args.checkpoint_path, map_location='cpu')
-    
+
     model.load_state_dict(checkpoint_dict['state_dict'])# load model weights
-    
+
     if 'optimizer' in checkpoint_dict.keys():
         optimizer.load_state_dict(checkpoint_dict['optimizer'])# load optimizer state
     #if 'amp' in checkpoint_dict.keys() and amp is not None:
@@ -298,10 +299,10 @@ def load_checkpoint(checkpoint_path, model, optimizer, resGAN, dbGAN, infGAN, be
         best_loss_dict = checkpoint_dict['best_loss_dict']
     if 'average_loss' in checkpoint_dict.keys():
         average_loss = checkpoint_dict['average_loss']
-	
+
     iteration = 0 if start_from_checkpoints_from_zero else checkpoint_dict['iteration']
     saved_lookup = checkpoint_dict['speaker_id_lookup'] if 'speaker_id_lookup' in checkpoint_dict.keys() else None
-    
+
     print(f"Loaded checkpoint '{args.checkpoint_path}' from iteration {iteration}")
     return model, optimizer, learning_rate, iteration, best_validation_loss, best_inf_attsc, saved_lookup, best_val_loss_dict, best_loss_dict
 
@@ -311,19 +312,19 @@ def save_checkpoint(model, optimizer, resGAN, dbGAN, infGAN, learning_rate, iter
     from CookieTTS.utils.dataset.utils import load_filepaths_and_text
     tqdm.write("Saving model and optimizer state at iteration {} to {}".format(
         iteration, filepath))
-    
+
     if resGAN is not None:
         resGAN.save_state_dict(filepath+'_resdis')
-    
+
     if dbGAN is not None:
         dbGAN.save_state_dict(filepath+'_dbDis')
-    
+
     if infGAN is not None:
         infGAN.save_state_dict(filepath+'_InfGAN')
-    
+
     assert all(str(line[2]).isdigit() for line in speakerlist), 'speakerlist got str in speaker_id section!'
     speaker_name_lookup = {x[1].strip(): x[2] for x in speakerlist}
-    
+
     save_dict = {'iteration'           : iteration,
                  'state_dict'          : model.state_dict(),
                  'optimizer'           : optimizer.state_dict(),
@@ -347,18 +348,18 @@ def write_dict_to_file(file_losses, fpath, n_gpus, rank, deliminator='","', ends
     if n_gpus > 1:
         # synchronize data between graphics cards
         import pickle
-        
+
         # dump file_losses for each graphics card into files
         with open(fpath+f'_rank{rank}', 'wb') as pickle_file:
             pickle.dump(file_losses, pickle_file, pickle.HIGHEST_PROTOCOL)
-        
+
         torch.distributed.barrier()# wait till all graphics cards reach this point.
-        
+
         # merge file losses from other graphics cards into this process
         list_of_dicts = []
         for f_rank in [x for x in list(range(n_gpus)) if x != rank]:
             list_of_dicts.append(pickle.load(open(f'{fpath}_rank{f_rank}', "rb")))
-        
+
         for new_file_losses in list_of_dicts:
             for path, loss_dict in new_file_losses.items():
                 if path in file_losses:
@@ -366,11 +367,11 @@ def write_dict_to_file(file_losses, fpath, n_gpus, rank, deliminator='","', ends
                         file_losses[path] = loss_dict
                 else:
                     file_losses[path] = loss_dict
-        
+
         torch.distributed.barrier()# wait till all graphics cards reach this point.
-        
+
         os.remove(fpath+f'_rank{rank}')
-    
+
     if rank == 0:# write file_losses data to .CSV file.
         print(f"Writing CSV to {fpath}")
         with open(fpath, 'w') as f:
@@ -381,7 +382,7 @@ def write_dict_to_file(file_losses, fpath, n_gpus, rank, deliminator='","', ends
                 for loss_name, loss_value in loss_dict.items():
                     line.append(str(loss_value))
                 f.write('\n'+ends+deliminator.join(line)+ends)
-    
+
     return file_losses
 
 def get_mse_sampled_filelist(original_filelist, file_losses, exp_factor, seed=None, max_weighting=8.0):
@@ -398,24 +399,24 @@ def get_mse_sampled_filelist(original_filelist, file_losses, exp_factor, seed=No
                 elif loss_value is not None:
                     speaker_losses[speaker_id][loss_name].append(loss_value)
     assert len(speaker_losses.keys())
-    
+
     # then average the loss list for each speaker
     speaker_avg_losses = {k: {} for k in sorted(speaker_losses.keys())}
     for speaker in speaker_avg_losses.keys():
         for loss_name in speaker_losses[speaker].keys():
             speaker_avg_losses[speaker][loss_name] = sum([x for x in speaker_losses[speaker][loss_name] if x is not None])/len(speaker_losses[speaker][loss_name])
     assert len(speaker_avg_losses.keys())
-    
+
     # generate speaker filelists
     spkr_filelist = {int(spkr_id): [] for spkr_id in set([x[2] for x in original_filelist])}
     for path, quote, speaker_id, *_ in original_filelist:
         spkr_filelist[int(speaker_id)].append([path, quote, speaker_id, *_])
     assert len(spkr_filelist.keys()) and any(len(x) for x in spkr_filelist.values())
-    
+
     # shuffle speaker filelists
     for k in spkr_filelist.keys():
         random.Random(seed).shuffle(spkr_filelist[k])
-    
+
     # calculate dataset portion for each speaker and build new filelist
     dataset_len = len(original_filelist)
     new_filelist = []
@@ -432,7 +433,7 @@ def get_mse_sampled_filelist(original_filelist, file_losses, exp_factor, seed=No
                 spkr_files = spkr_files * min(ceil(n_files/len(spkr_files)), max_weighting)# repeat filelist if needed
             new_filelist.extend(spkr_files[:n_files])
     assert len(new_filelist)
-    
+
     return new_filelist
 
 def update_smoothed_dict(orig_dict, new_dict, smoothing_factor=0.6):
@@ -444,11 +445,11 @@ def update_smoothed_dict(orig_dict, new_dict, smoothing_factor=0.6):
                     orig_dict[key][loss_name] = orig_dict[key][loss_name]*(smoothing_factor) + new_dict[key][loss_name]*(1-smoothing_factor)
                 elif loss_name in new_dict[key] and type(new_dict[key][loss_name]) in [int, float]:
                     orig_dict[key][loss_name] = new_dict[key][loss_name]
-        
+
         else:# if audio file not in dict, assign new key to dict
             orig_dict[key] = new_dict[key]
     return orig_dict
-    
+
 
 def validate(hparams, args, file_losses, model, criterion, valset, best_val_loss_dict, iteration,
              collate_fn, logger, val_teacher_force_till, val_p_teacher_forcing, teacher_force=-1):
@@ -468,14 +469,14 @@ def validate(hparams, args, file_losses, model, criterion, valset, best_val_loss
                                 num_workers=hparams.val_num_workers,# prefetch_factor=hparams.prefetch_factor,
                                 shuffle=False, batch_size=hparams.batch_size,
                                 pin_memory=False, drop_last=False, collate_fn=collate_fn)
-        
+
         loss_dict_total = None
         for i, batch in tqdm(enumerate(val_loader), desc="Validation", total=len(val_loader), smoothing=0): # i = index, batch = stuff in array[i]
             y = model.parse_batch(batch)
             with torch.random.fork_rng(devices=[0,]):
                 torch.random.manual_seed(i)# use repeatable seeds during validation so results are more consistent and comparable.
                 y_pred = force(model, valid_kwargs=model_args, **{**y, "teacher_force_till": val_teacher_force_till, "p_teacher_forcing": val_p_teacher_forcing})
-            
+
             val_loss_scalars = {
                  "spec_MSE_weight": 0.00,
                 "spec_MFSE_weight": 1.00,
@@ -498,31 +499,31 @@ def validate(hparams, args, file_losses, model, criterion, valset, best_val_loss
             file_losses = update_smoothed_dict(file_losses, file_losses_batch, file_losses_smoothness)
             if loss_dict_total is None:
                 loss_dict_total = {k: 0. for k, v in loss_dict.items()}
-            
+
             if hparams.distributed_run:
                 reduced_loss_dict = {k: reduce_tensor(v.data, args.n_gpus).item() if v is not None else 0. for k, v in loss_dict.items()}
             else:
                 reduced_loss_dict = {k: v.item() if v is not None else 0. for k, v in loss_dict.items()}
             reduced_loss = reduced_loss_dict['loss']
-            
+
             for k in loss_dict_total.keys():
                 loss_dict_total[k] = loss_dict_total[k] + reduced_loss_dict[k]
             # end forloop
         loss_dict_total = {k: v/(i+1) for k, v in loss_dict_total.items()}
         # end torch.no_grad()
-    
+
     # reverse changes to valset and model
     if hparams.inference_equally_sample_speakers and teacher_force == 2:# if inference, sample from each speaker equally. So speakers with smaller datasets get the same weighting onto the val loss.
         valset.update_filelist(orig_filelist)
     model.train()
     model.decoder.half_inference_mode = orig_himode
-    
+
     # update best losses
     if best_val_loss_dict is None:
         best_val_loss_dict = loss_dict_total
     else:
         best_val_loss_dict = {k: min(best_val_loss_dict[k], loss_dict_total[k]) for k in best_val_loss_dict.keys()}
-    
+
     # print, log data and return.
     if args.rank == 0:
         tqdm.write(f"Validation loss {iteration}: {loss_dict_total['loss']:9f}  Average Max Attention: {loss_dict_total['avg_max_attention']:9f}")
@@ -532,12 +533,12 @@ def validate(hparams, args, file_losses, model, criterion, valset, best_val_loss
                 logger.log_infer(*log_terms)
             else:
                 logger.log_validation(*log_terms)
-    
+
     if teacher_force == 2:
         return loss_dict_total['weighted_score'], best_val_loss_dict, file_losses
     else:
         return loss_dict_total['loss'], best_val_loss_dict, file_losses
-    
+
 
 
 def calculate_global_mean(data_loader, global_mean_npy, hparams):
@@ -577,11 +578,11 @@ def train(args, rank, group_name, hparams):
     hparams.rank = rank
     if hparams.distributed_run:
         init_distributed(hparams, args.n_gpus, rank, group_name)
-    
+
     # reproducablilty stuffs
     torch.manual_seed(hparams.seed)
     torch.cuda.manual_seed(hparams.seed)
-    
+
     # initialize blank model
     print('Initializing Tacotron2...')
     model = load_model(hparams)
@@ -590,28 +591,28 @@ def train(args, rank, group_name, hparams):
     model_args = get_args(model.forward)
     model.eval()
     learning_rate = hparams.learning_rate
-    
+
     # (optional) show the names of each layer in model, mainly makes it easier to copy/paste what you want to adjust
     if hparams.print_layer_names_during_startup:
         print(*[f"Layer{i} = "+str(x[0])+" "+str(x[1].shape) for i,x in enumerate(list(model.named_parameters()))], sep="\n")
-    
+
     # (optional) Freeze layers by disabling grads
     if len(hparams.frozen_modules):
         for layer, params in list(model.named_parameters()):
             if any(layer.startswith(module) for module in hparams.frozen_modules):
                 params.requires_grad = False
                 print(f"Layer: {layer} has been frozen")
-    
+
     if len(hparams.unfrozen_modules):
         for layer, params in list(model.named_parameters()):
             if any(layer.startswith(module) for module in hparams.unfrozen_modules):
                 params.requires_grad = True
                 print(f"Layer: {layer} has been unfrozen")
-    
+
     # define optimizer (any params without requires_grad are ignored)
     optimizer =  torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate, weight_decay=hparams.weight_decay)
     #optimizer = apexopt.FusedAdam(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate, weight_decay=hparams.weight_decay)
-    
+
     resGAN = None
     if hparams.use_res_enc:
         resGAN = ResGAN(hparams).cuda()
@@ -619,7 +620,7 @@ def train(args, rank, group_name, hparams):
         #resGAN.optimizer = apexopt.FusedAdam(filter(lambda p: p.requires_grad, resGAN.discriminator.parameters()), lr=learning_rate, weight_decay=hparams.weight_decay)
         if hparams.distributed_run:
             resGAN.discriminator = apply_gradient_allreduce(resGAN.discriminator)
-    
+
     dbGAN = None
     if hparams.use_dbGAN:
         dbGAN = DebluraGAN(hparams).cuda()
@@ -627,7 +628,7 @@ def train(args, rank, group_name, hparams):
         #dbGAN.optimizer = apexopt.FusedAdam(filter(lambda p: p.requires_grad, dbGAN.discriminator.parameters()), lr=learning_rate, weight_decay=hparams.weight_decay)
         if hparams.distributed_run:
             dbGAN.discriminator = apply_gradient_allreduce(dbGAN.discriminator)
-    
+
     infGAN = None
     if hparams.use_InfGAN:
         infGAN = TemporalInferenceGAN(hparams).cuda() if hparams.TemporalInfGAN else LSTMInferenceGAN(hparams).cuda()
@@ -635,18 +636,18 @@ def train(args, rank, group_name, hparams):
         #infGAN.optimizer = apexopt.FusedAdam(filter(lambda p: p.requires_grad, infGAN.discriminator.parameters()), lr=learning_rate, weight_decay=hparams.weight_decay)
         if hparams.distributed_run:
             infGAN.discriminator = apply_gradient_allreduce(infGAN.discriminator)
-    
+
     if True and rank == 0:
         pytorch_total_params = sum(p.numel() for p in model.parameters())
         print("{:,} total parameters in model".format(pytorch_total_params))
         pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print("{:,} trainable parameters.".format(pytorch_total_params))
-    
+
     print("Initializing AMP Model(s) / Optimzier(s)")
     if hparams.fp16_run:
         models     = [model,]
         optimizers = [optimizer,]
-        
+
         if hparams.use_res_enc:
             models.append(resGAN.discriminator)
             optimizers.append(resGAN.optimizer)
@@ -674,21 +675,21 @@ def train(args, rank, group_name, hparams):
         assert     len(models) == 0
         assert len(optimizers) == 0
         del models, optimizers
-    
+
     print("Initializing Gradient AllReduce model wrapper.")
     if hparams.distributed_run:
         model = apply_gradient_allreduce(model)
-    
+
     print("Initializing Tacotron2 Loss func.")
     criterion = Tacotron2Loss(hparams)
-    
+
     print("Initializing Tacotron2 Logger.")
     logger = prepare_directories_and_logger(hparams, args)
-    
+
     # Load checkpoint if one exists
     best_validation_loss = 1e3# used to see when "best_val_model" should be saved
     best_inf_attsc       = -99# used to see when "best_inf_attsc" should be saved
-    
+
     is_overflow = False
     average_loss = 9e9
     n_restarts = 0
@@ -698,12 +699,12 @@ def train(args, rank, group_name, hparams):
     _learning_rate = 1e-3
     saved_lookup = None
     original_filelist = None
-    
+
     global file_losses
     file_losses = {}
     global file_losses_smoothness
     file_losses_smoothness = 0.6
-    
+
     global best_val_loss_dict
     best_val_loss_dict = None
     global best_loss_dict
@@ -712,7 +713,7 @@ def train(args, rank, group_name, hparams):
     expavg_loss_dict = None
     expavg_loss_dict_iters = 0# initial iters expavg_loss_dict has been fitted
     loss_dict_smoothness = 0.95 # smoothing factor
-    
+
     if args.checkpoint_path is not None:
         if args.warm_start:
             model, iteration, saved_lookup = warm_start_model(
@@ -728,7 +729,7 @@ def train(args, rank, group_name, hparams):
         checkpoint_iter = iteration
         iteration += 1  # next iteration is iteration + 1
         print('Model Loaded')
-    
+
     # define datasets/dataloaders
     dataloader_args = [*get_args(criterion.forward), *model_args]
     if rank == 0:
@@ -736,7 +737,7 @@ def train(args, rank, group_name, hparams):
     train_loader, valset, collate_fn, train_sampler, trainset, speakerlist = prepare_dataloaders(hparams, dataloader_args, args, saved_lookup)
     epoch_offset = max(0, int(iteration / len(train_loader)))
     speaker_lookup = trainset.speaker_ids
-    
+
     # load and/or generate global_mean
     if hparams.drop_frame_rate > 0.:
         if rank != 0: # if global_mean not yet calcuated, wait for main thread to do it
@@ -745,20 +746,20 @@ def train(args, rank, group_name, hparams):
         assert hparams.n_mel_channels == global_mean.squeeze().shape[0], f'{hparams.global_mean_npy} has {global_mean.squeeze().shape[0]} channels, expected {hparams.n_mel_channels}.\nDelete the file if unsure.'
         hparams.global_mean = global_mean
         model.global_mean = global_mean
-    
+
     # define scheduler
     use_scheduler = 0
     if use_scheduler:
         scheduler = ReduceLROnPlateau(optimizer, factor=0.1**(1/5), patience=10)
-    
+
     model.train()
-    
+
     for param_group in optimizer.param_groups:
         param_group['lr'] = learning_rate
-    
+
     just_did_val = True
     rolling_loss = StreamingMovingAverage(min(int(len(train_loader)), 200))
-    
+
     # reproducablilty stuffs
     torch.manual_seed(hparams.seed)
     torch.cuda.manual_seed(hparams.seed)
@@ -774,7 +775,7 @@ def train(args, rank, group_name, hparams):
         batch['gt_gate_logits' ] = batch['gt_gate_logits'].new_zeros(batch['text'].shape[0], hparams.max_segment_length)
         optimizer.zero_grad()
         y = model.parse_batch(batch) # move batch to GPU (async)
-        y_pred = force(model, valid_kwargs=model_args, **{**y, "teacher_force_till": 0, "p_teacher_forcing": 0.0, "drop_frame_rate": 0.1})        
+        y_pred = force(model, valid_kwargs=model_args, **{**y, "teacher_force_till": 0, "p_teacher_forcing": 0.0, "drop_frame_rate": 0.1})
         loss_scalars = {
              "spec_MSE_weight": 0.0,
             "spec_MFSE_weight": 1.0,
@@ -797,46 +798,46 @@ def train(args, rank, group_name, hparams):
         }
         loss_dict, file_losses_batch = criterion(model, y_pred, y, loss_scalars, resGAN if hparams.use_res_enc else None, dbGAN if hparams.use_dbGAN else None,)
         loss = loss_dict['loss']
-        
+
         if hparams.distributed_run:
             reduced_loss_dict = {k: reduce_tensor(v.data, args.n_gpus).item() if v is not None else 0. for k, v in loss_dict.items()}
         else:
             reduced_loss_dict = {k: v.item() if v is not None else 0. for k, v in loss_dict.items()}
-        
+
         reduced_loss = reduced_loss_dict['loss']
-        
+
         if hparams.fp16_run:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
             loss.backward()
-        
+
         if hparams.fp16_run:
             grad_norm = torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 1e-9)
             is_overflow = math.isinf(grad_norm) or math.isnan(grad_norm)
         else:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1e-9)
-        
+
         for param_group in optimizer.param_groups:
             param_group['lr'] = 0.0
         #optimizer.step()
         del grad_norm, reduced_loss, loss_dict, file_losses_batch, y, y_pred, batch, loss_scalars
     print("Finished Pre-Allocating VRAM.")
-    
+
     # reproducablilty stuffs
     torch.manual_seed(hparams.seed)
     torch.cuda.manual_seed(hparams.seed)
-    
+
     # ================ MAIN TRAINNIG LOOP! ===================
     training = True
     while training:
         try:
             for epoch in tqdm(range(epoch_offset, hparams.epochs), initial=epoch_offset, total=hparams.epochs, desc="Epoch:", position=1, unit="epoch"):
                 tqdm.write("Epoch:{}".format(epoch))
-                
+
                 train_loader.dataset.shuffle_dataset()# Shuffle Dataset
                 dataset_len = len(train_loader)
-                
+
                 start_time = time.time()
                 # start iterating through the epoch
                 for i, batch in tqdm(enumerate(train_loader), desc="Iter:  ", smoothing=0, total=len(train_loader), position=0, unit="iter"):
@@ -878,7 +879,7 @@ def train(args, rank, group_name, hparams):
                             just_did_val=False
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = learning_rate
-                    
+
                     if hparams.use_InfGAN:
                         model.decoder.return_attention_contexts    = infGAN.use_context
                         model.decoder.return_decoder_rnn_outputs   = infGAN.use_DecRNN
@@ -893,7 +894,7 @@ def train(args, rank, group_name, hparams):
                     y = model.parse_batch(batch) # move batch to GPU (async)
                     y['gt_mel'].requires_grad_(True)
                     y_pred = force(model, valid_kwargs=model_args, **{**y, "teacher_force_till": teacher_force_till, "p_teacher_forcing": p_teacher_forcing, "drop_frame_rate": drop_frame_rate})
-                    
+
                     loss_scalars = {
                          "spec_MSE_weight": spec_MSE_weight,
                         "spec_MFSE_weight": spec_MFSE_weight,
@@ -918,23 +919,23 @@ def train(args, rank, group_name, hparams):
                                                             resGAN if hparams.use_res_enc else None,
                                                             dbGAN  if hparams.use_dbGAN   else None,
                                                             infGAN if hparams.use_InfGAN  else None,)
-                    
+
                     file_losses = update_smoothed_dict(file_losses, file_losses_batch, file_losses_smoothness)
-                    
+
                     if hparams.distributed_run:
                         reduced_loss_dict = {k: reduce_tensor(v.data, args.n_gpus).item() if v is not None else 0. for k, v in loss_dict.items()}
                     else:
                         reduced_loss_dict = {k: v.item() if v is not None else 0. for k, v in loss_dict.items()}
-                    
+
                     reduced_loss = reduced_loss_dict['loss']
-                    
+
                     loss = loss_dict['loss']
                     if hparams.fp16_run:
                         with amp.scale_loss(loss, optimizer) as scaled_loss:
                             scaled_loss.backward()
                     else:
                         loss.backward()
-                    
+
                     if rank==0 and show_gradients:
                         try:
                             _=avg_grads
@@ -951,10 +952,10 @@ def train(args, rank, group_name, hparams):
                                 norm_grad = grad/avg_grads[param_name]
                                 if grad > 30.0 or norm_grad > 2.0:
                                     print(f'{norm_grad:03.1f} | {grad:020.6f} | {params.grad.abs().mean().item():06.6f}| {params.grad.abs().max().item():010.6f} | {param_name}')
-                    
+
                     #with torch.no_grad(): # print collected gradients at the gt_mel
                     #    print(f"{y['gt_mel'].grad.chunk(2, dim=0)[0].abs().sum().item():06.2f}InputGrad0, {y['gt_mel'].grad.chunk(2, dim=0)[1].abs().sum().item():06.2f}InputGrad1")
-                    
+
                     if grad_clip_thresh:
                         if hparams.fp16_run:
                             grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -965,25 +966,25 @@ def train(args, rank, group_name, hparams):
                                 model.parameters(), grad_clip_thresh)
                     else:
                         grad_norm = 0.0
-                    
+
                     optimizer.step()
-                    
+
                     # calcuate the effective learning rate after gradient clipping is applied, and use the effective learning rate on the GAN modules.
                     effective_lr = 0.0 if is_overflow else (learning_rate*min((grad_clip_thresh/grad_norm+1e-6), 1.0) if grad_clip_thresh else learning_rate)
-                    
+
                     # (Optional) Discriminator Forward+Backward Pass
                     if hparams.use_res_enc:
                         with torch.random.fork_rng(devices=[0,]):
                             for param_group in resGAN.optimizer.param_groups:
                                 param_group['lr'] = effective_lr
                             resGAN(y_pred, reduced_loss_dict, loss_dict, loss_scalars)
-                    
+
                     if 1 and hparams.use_dbGAN:
                         with torch.random.fork_rng(devices=[0,]):
                             for param_group in dbGAN.optimizer.param_groups:
                                 param_group['lr'] = effective_lr
                             dbGAN(y_pred, y, reduced_loss_dict, loss_dict, loss_scalars)
-                    
+
                     if hparams.use_InfGAN and model.decoder.half_inference_mode:
                         with torch.random.fork_rng(devices=[0,]):
                             expavgInfGANAcc = expavg_loss_dict.get('InfGAN_accuracy', None) if expavg_loss_dict is not None else None
@@ -991,29 +992,29 @@ def train(args, rank, group_name, hparams):
                             for param_group in infGAN.optimizer.param_groups:
                                 param_group['lr'] = effective_lr if (InfGANAcc < InfGAN_max_accuracy) else 0.0
                             infGAN(model, y_pred, y, reduced_loss_dict, loss_dict, loss_scalars)
-                    
+
                     # get current Loss Scale of first optimizer
                     loss_scale = amp._amp_state.loss_scalers[0]._loss_scale if hparams.fp16_run else 32768.
-                    
+
                     # restart if training/model has collapsed
                     if (iteration > 1e3 and (reduced_loss > LossExplosionThreshold)) or (math.isnan(reduced_loss)):
                         raise LossExplosion(f"\nLOSS EXPLOSION EXCEPTION ON RANK {rank}: Loss reached {reduced_loss} during iteration {iteration}.\n\n\n")
                     if (loss_scale < 1/4):
                         raise LossExplosion(f"\nLOSS EXCEPTION ON RANK {rank}: Loss Scaler reached {loss_scale} during iteration {iteration}.\n\n\n")
-                    
+
                     if expavg_loss_dict is None:
                         expavg_loss_dict = reduced_loss_dict
                     else:
                         expavg_loss_dict.update({k:v for k, v in reduced_loss_dict.items() if k not in expavg_loss_dict.keys()})# if new loss term appears in reduced_loss_dict, add it to the expavg_loss_dict.
                         expavg_loss_dict = {k: (reduced_loss_dict[k]*(1-loss_dict_smoothness))+(expavg_loss_dict[k]*loss_dict_smoothness) for k in expavg_loss_dict.keys() if k in reduced_loss_dict}
                         expavg_loss_dict_iters += 1
-                    
+
                     if expavg_loss_dict_iters > 100:
                         if best_loss_dict is None:
                             best_loss_dict = expavg_loss_dict
                         else:
                             best_loss_dict = {k: min(best_loss_dict[k], expavg_loss_dict[k]) for k in best_loss_dict.keys() if k in expavg_loss_dict}
-                    
+
                     if rank == 0:
                         duration = time.time() - start_time
                         if not is_overflow:
@@ -1030,17 +1031,17 @@ def train(args, rank, group_name, hparams):
                         else:
                             tqdm.write("Gradient Overflow, Skipping Step")
                         start_time = time.time()
-                    
+
                     if iteration%checkpoint_interval==0 or os.path.exists(save_file_check_path):
                         # save model checkpoint like normal
                         if rank == 0:
                             checkpoint_path = os.path.join(args.output_directory, "checkpoint_{}".format(iteration))
                             save_checkpoint(model, optimizer, resGAN, dbGAN, infGAN, learning_rate, iteration, hparams, best_validation_loss, best_inf_attsc, average_loss, best_val_loss_dict, best_loss_dict, speaker_lookup, speakerlist, checkpoint_path)
-                    
+
                     if iteration%dump_filelosses_interval==0:
                         print("Updating File_losses dict!")
                         file_losses = write_dict_to_file(file_losses, os.path.join(args.output_directory, 'file_losses.csv'), args.n_gpus, rank)
-                    
+
                     if (iteration % int(validation_interval) == 0) or (os.path.exists(save_file_check_path)) or (iteration < 1000 and (iteration % 250 == 0)):
                         if rank == 0 and os.path.exists(save_file_check_path):
                             os.remove(save_file_check_path)
@@ -1065,17 +1066,17 @@ def train(args, rank, group_name, hparams):
                                     model, optimizer, resGAN, dbGAN, infGAN, learning_rate, iteration, hparams, best_validation_loss, best_inf_attsc,
                                     average_loss, best_val_loss_dict, best_loss_dict, speaker_lookup, speakerlist, checkpoint_path)
                         just_did_val = True
-                    
+
                     del y_pred, y, batch, loss_dict, reduced_loss_dict
                     iteration += 1
                     # end of iteration loop
-                
+
                 # update filelist of training dataloader
                 if (iteration > hparams.min_avg_max_att_start) and (iteration-checkpoint_iter >= dataset_len):
                     print("Updating File_losses dict!")
                     file_losses = write_dict_to_file(file_losses, os.path.join(args.output_directory, 'file_losses.csv'), args.n_gpus, rank)
                     print("Done!")
-                    
+
                     print("Updating dataloader filtered paths!")
                     bad_file_paths = [k for k in list(file_losses.keys()) if
                         file_losses[k]['avg_max_attention'] < hparams.min_avg_max_att or# if attention stength if too weak
@@ -1094,24 +1095,24 @@ def train(args, rank, group_name, hparams):
                         train_loader.dataset.update_filelist(get_mse_sampled_filelist(
                                                              original_filelist, file_losses, hparams.speaker_mse_exponent, seed=iteration))
                         print("Done!")
-                
+
                 # end of epoch loop
             training = False # exit the While loop
-        
+
         #except Exception as ex: # print Exception and continue from checkpoint. (turns out it takes < 4 seconds to restart like this, fucking awesome)
         except LossExplosion as ex: # print Exception and continue from checkpoint. (turns out it takes < 4 seconds to restart like this, fucking awesome)
             print(ex) # print Loss
             checkpoint_path = os.path.join(args.output_directory, "best_val_model")
             assert os.path.exists(checkpoint_path), "best_val_model checkpoint must exist for automatic restarts"
-            
+
             if hparams.fp16_run:
                 amp._amp_state.loss_scalers[0]._loss_scale = 32768
-            
+
             # clearing VRAM for load checkpoint
             model.zero_grad()
             x=y=y_pred=loss=len_loss=loss_z=loss_w=loss_s=loss_att=dur_loss_z=dur_loss_w=dur_loss_s=None
             torch.cuda.empty_cache()
-            
+
             model.eval()
             model, optimizer, _learning_rate, iteration, best_validation_loss, saved_lookup = load_checkpoint(checkpoint_path, model, optimizer)
             learning_rate = optimizer.param_groups[0]['lr']
@@ -1149,28 +1150,28 @@ if __name__ == '__main__':
                         required=False, help='Distributed group name')
     parser.add_argument('--hparams', type=str,
                         required=False, help='comma separated name=value pairs')
-    
+
     args = parser.parse_args()
     hparams = create_hparams(args.hparams)
-    
+
     torch.backends.cudnn.enabled   = hparams.cudnn_enabled
     torch.backends.cudnn.benchmark = hparams.cudnn_benchmark
-    
+
     print("FP16 Run:", hparams.fp16_run)
     print("Dynamic Loss Scaling:", hparams.dynamic_loss_scaling)
     print("Distributed Run:", hparams.distributed_run)
     print("cuDNN Enabled:", hparams.cudnn_enabled)
     print("cuDNN Benchmark:", hparams.cudnn_benchmark)
-    
+
     if args.gen_mels:
         print("Generating Mels...")
         create_mels(hparams)
         print("Finished Generating Mels")
-    
+
     if args.detect_anomaly: # checks backprop for NaN/Infs and outputs very useful stack-trace. Runs slowly while enabled.
         torch.autograd.set_detect_anomaly(True)
         print("Autograd Anomaly Detection Enabled!\n(Code will run slower but backward pass will output useful info if crashing or NaN/inf values)")
-    
+
     # these are needed for fp16 training, not inference
     if hparams.fp16_run:
         from apex import amp
@@ -1181,6 +1182,6 @@ if __name__ == '__main__':
         from apex import optimizers as apexopt
     except:
         pass
-    
+
     train(args, args.rank, args.group_name, hparams)
 
