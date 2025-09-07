@@ -2,7 +2,7 @@
 
 import types
 import sys
-
+import torch
 #apex amp patch
 if not hasattr(torch, "_six"):
     _six = types.ModuleType("torch._six")
@@ -23,7 +23,7 @@ import pickle
 import numpy as np
 from numpy import finfo
 
-import torch
+
 from distributed import apply_gradient_allreduce
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
@@ -228,7 +228,7 @@ def warm_start_force_model(checkpoint_path, model, resGAN, dbGAN, infGAN):
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
 
-    checkpoint_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
+    checkpoint_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     pretrained_dict = checkpoint_dict['state_dict']
     model_dict = model.state_dict()
     # Fiter out unneccessary keys
