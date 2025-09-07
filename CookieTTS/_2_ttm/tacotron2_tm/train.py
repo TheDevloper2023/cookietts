@@ -290,7 +290,7 @@ def load_checkpoint(checkpoint_path, model, optimizer, resGAN, dbGAN, infGAN, be
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
 
-    checkpoint_dict = torch.load(args.checkpoint_path, map_location='cpu', weights_only=True)
+    checkpoint_dict = torch.load(args.checkpoint_path, map_location='cpu', weights_only=False)
 
     model.load_state_dict(checkpoint_dict['state_dict'])# load model weights
 
