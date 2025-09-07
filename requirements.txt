@@ -1,10 +1,10 @@
 torch>=1.4.0
-numpy
+numpy~=1.20
 scipy
-librosa
+librosa==0.9.1
 tensorboardX==1.1
 Unidecode
-nltk
+nltk>=3.6.5
 tqdm
 gdown
 soundfile
@@ -12,6 +12,6 @@ py7zr
 syllables
 pyworld
 pyloudnorm
-emoji
+emoji==2.11.1
 inflect==0.2.5
 pillow
