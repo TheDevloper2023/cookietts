@@ -228,7 +228,7 @@ def warm_start_force_model(checkpoint_path, model, resGAN, dbGAN, infGAN):
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
 
-    checkpoint_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=False, weights_only=True)
+    checkpoint_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
     pretrained_dict = checkpoint_dict['state_dict']
     model_dict = model.state_dict()
     # Fiter out unneccessary keys
