@@ -1,13 +1,9 @@
 # %%writefile /content/cookietts/CookieTTS/_2_ttm/tacotron2_tm/train.py
-#@title Setup Apex (I don't think I can migrate to python.cuda.amp, sorry)
-#Install apex
-############################################################################
-#Patch-1
-# Put this at the very top of your notebook / script
 
 import types
 import sys
 
+#apex amp patch
 if not hasattr(torch, "_six"):
     _six = types.ModuleType("torch._six")
     _six.string_classes = (str,)
@@ -16,8 +12,6 @@ if not hasattr(torch, "_six"):
     _six.PY3 = True
     sys.modules["torch._six"] = _six
 
-!git clone https://github.com/NVIDIA/apex -b "22.02-parallel-state"
-!cd apex; python setup.py install --cuda_ext --cpp_ext; pip3 install -v --no-cache-dir ./; cd ..
 
 import os
 os.environ["LRU_CACHE_CAPACITY"] = "3"# reduces RAM usage massively with pytorch 1.4 or older
@@ -234,7 +228,7 @@ def warm_start_force_model(checkpoint_path, model, resGAN, dbGAN, infGAN):
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
 
-    checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=False, weights_only=True)
     pretrained_dict = checkpoint_dict['state_dict']
     model_dict = model.state_dict()
     # Fiter out unneccessary keys
@@ -268,7 +262,7 @@ def warm_start_model(checkpoint_path, model, resGAN, dbGAN, infGAN, ignore_layer
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
 
-    checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
     model_dict = checkpoint_dict['state_dict']
     if len(ignore_layers) > 0:
         model_dict = {k: v for k, v in model_dict.items()
@@ -296,7 +290,7 @@ def load_checkpoint(checkpoint_path, model, optimizer, resGAN, dbGAN, infGAN, be
     if infGAN is not None and os.path.exists(checkpoint_path+'_InfGAN'):
         infGAN.load_state_dict_from_file(checkpoint_path+'_InfGAN')
 
-    checkpoint_dict = torch.load(args.checkpoint_path, map_location='cpu')
+    checkpoint_dict = torch.load(args.checkpoint_path, map_location='cpu', weights_only=True)
 
     model.load_state_dict(checkpoint_dict['state_dict'])# load model weights
 
