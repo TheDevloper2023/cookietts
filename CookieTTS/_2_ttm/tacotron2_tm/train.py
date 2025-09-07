@@ -1,4 +1,23 @@
 # %%writefile /content/cookietts/CookieTTS/_2_ttm/tacotron2_tm/train.py
+#@title Setup Apex (I don't think I can migrate to python.cuda.amp, sorry)
+#Install apex
+############################################################################
+#Patch-1
+# Put this at the very top of your notebook / script
+
+import types
+import sys
+
+if not hasattr(torch, "_six"):
+    _six = types.ModuleType("torch._six")
+    _six.string_classes = (str,)
+    _six.int_classes = (int,)
+    _six.FileNotFoundError = FileNotFoundError
+    _six.PY3 = True
+    sys.modules["torch._six"] = _six
+
+!git clone https://github.com/NVIDIA/apex -b "22.02-parallel-state"
+!cd apex; python setup.py install --cuda_ext --cpp_ext; pip3 install -v --no-cache-dir ./; cd ..
 
 import os
 os.environ["LRU_CACHE_CAPACITY"] = "3"# reduces RAM usage massively with pytorch 1.4 or older
