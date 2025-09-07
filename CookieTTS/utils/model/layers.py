@@ -304,14 +304,14 @@ class LSTMCellWithZoneout(RNNCellBase):
         super(LSTMCellWithZoneout, self).__init__(input_size, hidden_size, bias, num_chunks=4)
         self.dropout = dropout
         self.zoneout = zoneout
-        def check_forward_input(self, input: Tensor) -> None:
+    def check_forward_input(self, input: Tensor) -> None:
             # ensure input is 2D (batch, input_size) and input_size matches expected
             if input.dim() != 2:
                 raise RuntimeError(f"input must be 2D (batch, input_size); got {tuple(input.size())}")
             if input.size(1) != self.input_size:
                 raise RuntimeError(f"input has wrong feature dimension {input.size(1)} (expected {self.input_size})")
 
-        def check_forward_hidden(self, input: Tensor, hx: Optional[Tensor], idx: str) -> None:
+    def check_forward_hidden(self, input: Tensor, hx: Optional[Tensor], idx: str) -> None:
             # hx can be None (handled later), but if present verify shape matches (batch, hidden_size)
             if hx is None:
                 return
