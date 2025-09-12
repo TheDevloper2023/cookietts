@@ -1091,12 +1091,14 @@ def train(args, rank, group_name, hparams):
                     print("Done!")
 
                     print("Updating dataloader filtered paths!")
+                    """
                     bad_file_paths = [k for k in list(file_losses.keys()) if
                         file_losses[k]['avg_max_attention'] < hparams.min_avg_max_att or# if attention stength if too weak
                         file_losses[k]['att_diagonality']   > hparams.max_diagonality or# or diagonality is too high
                         file_losses[k]['spec_MSE']          > hparams.max_spec_mse]     # or audio quality is too low
-                                                                                        # then add to bad files list
-                    bad_file_paths = set(bad_file_paths)                                # and remove from dataset
+                    """
+                    bad_file_paths = []
+                    bad_file_paths = set(bad_file_paths)                                
                     filted_filelist = [x for x in train_loader.dataset.filelist if not (x[0] in bad_file_paths)]
                     train_loader.dataset.update_filelist(filted_filelist)
                     print(f"Done! {len(bad_file_paths)} Files removed from dataset. {len(filted_filelist)} Files remain.")
