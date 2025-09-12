@@ -302,7 +302,7 @@ class T2S:
         - hparams
         - speaker_lookup
         """
-        checkpoint = torch.load(tacotron_path) # load file into memory
+        checkpoint = torch.load(tacotron_path, weights_only=True) # load file into memory
         print("Loading Tacotron... ", end="")
         checkpoint_hparams = self.update_tacotron2_hparams(checkpoint['hparams']) # get hparams
         checkpoint_dict = checkpoint['state_dict'] # get state_dict
