@@ -37,7 +37,7 @@ def identify_transcript_storage(directory, audio_files, audio_ext, audio_basenam
     valid_txts = list()
     for txt_file in txt_files:
         if os.stat(txt_file).st_size > 80: # if txt_file has a reasonable size
-            text = open(txt_file, "r").read()
+            text = open(txt_file, "r", encoding="utf-8").read() #Some filelists won't load for some reason without forcing the encoding to utf-8
             n_pipes = text.count('|')# get number of pipe symbols
             n_nl = text.count('\n')  # get number of newline symbols
             if n_pipes > 1 and n_nl > 0: # if the text file has more than 2 pipes and a newline symbol
